@@ -23,6 +23,11 @@ MONTHS = {m.lower(): i for i, m in enumerate(('January', 'February', 'March', 'A
 MONTHS.update({m[:3]: n for m, n in list(MONTHS.items())})
 DATE = re.compile(r'\b(' + '|'.join(sorted(MONTHS, key=len, reverse=True)) + r')\.?\s+(\d{1,2})\s*[,\.]?\s*(20\d{2})\b', re.I)
 FIELDS = ('company', 'address', 'duration', 'student', 'program', 'section')
+PROGRAM = re.compile(
+    r'\b(?:(?P<cs>B[ .]*S[ .]*C[ .]*S|Bachelor\s+of\s+Science\s+in\s+Computer\s+Science)'
+    r'|(?P<it>B[ .]*S[ .]*I[ .]*T|Bachelor\s+of\s+Science\s+in\s+Information\s+Technology))\b',
+    re.I,
+)
 
 
 def clean(value: str) -> str:
@@ -60,9 +65,10 @@ def parse_report(text: str, filename: str) -> dict:
     submit = next((i for i, line in enumerate(lower) if 'submitted by' in line), -1)
     if submit >= 0 and submit + 1 < len(lines):
         row['student'] = lines[submit + 1]
-    program = next((i for i in range(max(0, submit + 1), len(lines)) if re.fullmatch(r'.*\b(BSCS|BSIT)\b.*', lines[i], re.I)), -1)
-    if program >= 0:
-        row['program'] = re.search(r'\b(BSCS|BSIT)\b', lines[program], re.I).group(1).upper()
+    program_match = next(((i, match) for i in range(max(0, submit + 1), len(lines)) if (match := PROGRAM.search(lines[i]))), None)
+    if program_match is not None:
+        program, match = program_match
+        row['program'] = 'BSCS' if match.group('cs') else 'BSIT'
         if program + 1 < len(lines) and not lower[program + 1].startswith('submitted to'):
             candidate = lines[program + 1]
             if re.fullmatch(r'[A-Za-z0-9/ -]{2,18}', candidate):
@@ -112,12 +118,10 @@ def scan_image(data: bytes, filename: str) -> dict:
         crop.save(crop_path)
         crop_text = ocr_image(crop_path)
         crop_row = parse_report('TRAINING NARRATIVE REPORT\n\n' + crop_text, filename)
+        if not chosen['program'] and crop_row['program']:
+            chosen['program'] = crop_row['program']
         if not chosen['section'] and crop_row['section']:
             chosen['section'] = crop_row['section']
-        if not chosen['section']:
-            match = re.search(r'\b(?:BSCS|BSIT)\b\s*\n\s*<?([A-Z0-9/ -]{2,16})>?', crop_text, re.I)
-            if match:
-                chosen['section'] = clean(match.group(1))
         chosen['needs_review'] = [field for field in FIELDS if not chosen[field]]
         if not chosen['start_date'] or not chosen['end_date']:
             chosen['needs_review'].append('dates')

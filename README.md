@@ -12,6 +12,8 @@ Windows' built-in English OCR is used. No cloud account or API key is needed. Up
 
 **Review every scanned record.** OCR can confuse letters and dates in dim or angled photos. The Review / edit dialog shows the OCR text and lets you correct all fields. The exported workbook marks unreviewed records as `Needs review`.
 
+Program majors are classified under their base program: for example, `BSCS-DA` becomes `BSCS` and `BSIT-GD` becomes `BSIT`. Full program names and spaced or dotted abbreviations are also recognized. The class section is kept separately.
+
 If a duration spans two calendar years, the workbook contains one row for each year so Excel's Year filter shows the report in both years. Choosing a year on the website downloads only that year's rows.
 
 ## Tests

@@ -6,6 +6,23 @@ from app import parse_report, years_for_record, make_workbook
 
 
 class ReportTests(unittest.TestCase):
+    def test_program_majors_are_classified_with_section_preserved(self):
+        for printed, expected in (
+            ('BSCS-DA', 'BSCS'), ('BSIT-GD', 'BSIT'),
+            ('bscs – Software Engineering', 'BSCS'),
+            ('B S I T - GD', 'BSIT'), ('B.S.C.S. - DA', 'BSCS'),
+            ('Bachelor of Science in Computer Science major in Data Analytics', 'BSCS'),
+            ('Bachelor of Science in Information Technology - Game Development', 'BSIT'),
+        ):
+            with self.subTest(printed=printed):
+                row = parse_report(f'Submitted by:\nJane Doe\n{printed}\n4th/J4T\nSubmitted to:\nProfessor', 'major.jpg')
+                self.assertEqual(row['program'], expected)
+                self.assertEqual(row['section'], '4th/J4T')
+
+    def test_program_detection_does_not_match_inside_other_words(self):
+        row = parse_report('Submitted by:\nJane Doe\nBSITEST\nJ4T', 'unknown.jpg')
+        self.assertEqual(row['program'], '')
+
     def test_extracts_cover_fields_and_both_years(self):
         text = '''University of Perpetual Help System Laguna
 TRAINING NARRATIVE REPORT
