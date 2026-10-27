@@ -14,6 +14,10 @@ Windows' built-in English OCR is used. No cloud account or API key is needed. Up
 
 Program majors are classified under their base program: for example, `BSCS-DA` becomes `BSCS` and `BSIT-GD` becomes `BSIT`. Full program names and spaced or dotted abbreviations are also recognized. The class section is kept separately.
 
+Sections can appear on the next line or alongside the program: `BSCS - J4S` gives program `BSCS` and section `J4S`, including when a major precedes the section.
+
+The scanner preserves `ñ` and `Ñ` through review and Excel export. It corrects the confirmed OCR misreads `Bifian`, `Nifio`, and `Dufigo` (or `Duigo`) to `Biñan`, `Niño`, and `Duñgo`, preserving capitalization and the original OCR text for review. Other ambiguous names still need manual review; genuine `fi` letter pairs are kept. Existing saved records need to be corrected or rescanned.
+
 If a duration spans two calendar years, the workbook contains one row for each year so Excel's Year filter shows the report in both years. Choosing a year on the website downloads only that year's rows.
 
 ## Tests

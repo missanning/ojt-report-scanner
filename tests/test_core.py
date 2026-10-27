@@ -6,6 +6,43 @@ from app import parse_report, years_for_record, make_workbook
 
 
 class ReportTests(unittest.TestCase):
+    def test_extracts_inline_section_after_program_or_major(self):
+        for printed, program, section in (
+            ('BSCS - J4S', 'BSCS', 'J4S'),
+            ('BSIT-J4A', 'BSIT', 'J4A'),
+            ('BSIT-GD - J4T', 'BSIT', 'J4T'),
+            ('BSIT — Major in Game Development J4S', 'BSIT', 'J4S'),
+            ('BSCS / j3a', 'BSCS', 'J3A'),
+        ):
+            with self.subTest(printed=printed):
+                row = parse_report(f'Submitted by:\nJane Doe\n{printed}\nSubmitted to:\nProfessor', 'inline.jpg')
+                self.assertEqual(row['program'], program)
+                self.assertEqual(row['section'], section)
+                self.assertNotIn('section', row['needs_review'])
+
+    def test_repairs_confirmed_enye_ocr_errors_without_changing_real_fi(self):
+        text = 'TRAINING NARRATIVE REPORT\nUPHSL - Bifian\nSto. Nifio, Bifian, Laguna\nSubmitted by:\nDufigo, Ezra Eleazar F.\nBSIT - J4T'
+        row = parse_report(text, 'enye.jpg')
+        self.assertEqual(row['company'], 'UPHSL - Biñan')
+        self.assertEqual(row['address'], 'Sto. Niño, Biñan, Laguna')
+        self.assertEqual(row['student'], 'Duñgo, Ezra Eleazar F.')
+        self.assertEqual(row['raw_text'], text)
+        for name in ('DUFIGO, EZRA', 'Duigo, Ezra', 'Duñgo, Ezra', 'Peña, Niño', 'PEÑA, NIÑO', 'Fidel Delfin', 'Office Filinvest'):
+            with self.subTest(name=name):
+                row = parse_report(f'Submitted by:\n{name}\nBSCS - J4S', 'name.jpg')
+                expected = {'DUFIGO, EZRA': 'DUÑGO, EZRA', 'Duigo, Ezra': 'Duñgo, Ezra'}.get(name, name)
+                self.assertEqual(row['student'], expected)
+
+    def test_normalizes_combining_enye_and_preserves_it_in_excel(self):
+        row = parse_report('TRAINING NARRATIVE REPORT\nAcme\nBin\u0303an\nSubmitted by:\nPen\u0303a, NIN\u0303O\nBSCS - J4S', 'unicode.jpg')
+        self.assertEqual(row['student'], 'Peña, NIÑO')
+        self.assertEqual(row['address'], 'Biñan')
+        with zipfile.ZipFile(io.BytesIO(make_workbook([row]))) as workbook:
+            sheet = workbook.read('xl/worksheets/sheet1.xml').decode('utf-8')
+            self.assertIn('Peña, NIÑO', sheet)
+            self.assertIn('Biñan', sheet)
+            self.assertIn('J4S', sheet)
+
     def test_program_majors_are_classified_with_section_preserved(self):
         for printed, expected in (
             ('BSCS-DA', 'BSCS'), ('BSIT-GD', 'BSIT'),

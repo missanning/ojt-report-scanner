@@ -9,6 +9,7 @@ import re
 import subprocess
 import tempfile
 import threading
+import unicodedata
 import uuid
 import webbrowser
 import zipfile
@@ -28,9 +29,22 @@ PROGRAM = re.compile(
     r'|(?P<it>B[ .]*S[ .]*I[ .]*T|Bachelor\s+of\s+Science\s+in\s+Information\s+Technology))\b',
     re.I,
 )
+SECTION = re.compile(r'\bJ\d{1,2}[A-Z]\b', re.I)
+# Confirmed against the supplied cover photos; never replace every "fi".
+ENYE_CORRECTIONS = {'bifian': 'biñan', 'nifio': 'niño', 'dufigo': 'duñgo', 'duigo': 'duñgo'}
+ENYE_OCR_WORDS = re.compile(r'\b(?:' + '|'.join(ENYE_CORRECTIONS) + r')\b', re.I)
+
+
+def restore_enye(match: re.Match[str]) -> str:
+    original = match.group()
+    corrected = ENYE_CORRECTIONS[original.lower()]
+    if original.isupper():
+        return corrected.upper()
+    return corrected.capitalize() if original[0].isupper() else corrected
 
 
 def clean(value: str) -> str:
+    value = ENYE_OCR_WORDS.sub(restore_enye, unicodedata.normalize('NFC', value))
     return re.sub(r'\s+', ' ', value.strip().strip('<>‹›[]{} ')).strip()
 
 
@@ -69,7 +83,10 @@ def parse_report(text: str, filename: str) -> dict:
     if program_match is not None:
         program, match = program_match
         row['program'] = 'BSCS' if match.group('cs') else 'BSIT'
-        if program + 1 < len(lines) and not lower[program + 1].startswith('submitted to'):
+        inline_section = SECTION.search(lines[program], match.end())
+        if inline_section:
+            row['section'] = inline_section.group().upper()
+        elif program + 1 < len(lines) and not lower[program + 1].startswith('submitted to'):
             candidate = lines[program + 1]
             if re.fullmatch(r'[A-Za-z0-9/ -]{2,18}', candidate):
                 row['section'] = candidate
