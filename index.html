@@ -23,6 +23,7 @@ dialog{border:0;border-radius:18px;padding:0;box-shadow:0 35px 100px #0b263c66;w
 <div class="intro"><div><div class="eyebrow">Document workspace</div><h1>From reports<br>to records.</h1><p>Scan OJT narrative report covers, check the extracted details, and export a clean Excel list. Reports spanning two years appear under both years.</p></div><div class="stat"><strong id="total">0</strong><span>Reports in workspace</span></div></div>
 <div class="layout"><aside class="panel upload"><h2>Add reports</h2><p class="sub">Choose cover page photos or a folder of images. Each image becomes one editable record.</p><div class="drop" id="drop"><div class="icon">▣</div><strong>Drop report images here</strong><span>JPG, PNG, BMP, TIFF or WebP · up to 16 MB each</span></div><div class="actions"><button class="btn" id="choose">Choose files</button><button class="btn secondary" id="folder">Choose folder</button></div><input type="file" id="files" accept="image/*" multiple hidden><input type="file" id="folderInput" accept="image/*" multiple webkitdirectory hidden><div class="progress" id="progress"><span id="progressText">Scanning…</span><div class="bar"><i id="progressBar"></i></div></div><div class="tip"><b>How it works</b><br>Upload a cover page, review anything OCR could not read, then export. Records stay in this browser on this computer until you delete them.</div></aside>
 <section class="panel records"><div class="record-head"><div><h2>Extracted records</h2><p class="sub" style="margin:0">Review the fields before downloading your workbook.</p></div><button class="btn" id="export" disabled>Download Excel</button></div><div class="toolbar" style="margin-top:18px"><select id="year" aria-label="Filter by year"><option value="all">All years</option></select><input id="search" type="search" placeholder="Search records" aria-label="Search records"><span id="count" style="color:var(--muted);font-size:12px;margin-left:auto"></span></div><div class="list" id="list"></div></section></div>
+<p class="sub"><button type="button" class="small" id="reparse">Re-read saved OCR</button> Update company names and addresses in unreviewed records. Reviewed corrections are kept.</p>
 </main>
 <dialog id="editor"><div class="dialog-head"><div><h2>Review report</h2><p id="editSource"></p></div><button class="close" id="close" aria-label="Close">×</button></div><form id="editForm"><div class="form"><div class="form-grid"><div class="field wide"><label for="company">Company name</label><input id="company" required></div><div class="field wide"><label for="address">Company address</label><input id="address" required></div><div class="field wide"><label for="duration">OJT duration as printed</label><input id="duration" required></div><div class="field"><label for="start_date">Start date</label><input id="start_date" type="date" required></div><div class="field"><label for="end_date">End date</label><input id="end_date" type="date" required></div><div class="field wide"><label for="student">Student name</label><input id="student" required></div><div class="field"><label for="program">Program</label><select id="program" required><option value="">Select program</option><option>BSCS</option><option>BSIT</option></select></div><div class="field"><label for="section">Section</label><input id="section" required></div></div><details class="raw"><summary>View OCR text</summary><pre id="rawText"></pre></details></div><div class="dialog-foot"><button type="button" class="btn ghost" id="cancel">Cancel</button><button type="submit" class="btn">Save corrections</button></div></form></dialog>
 <div class="notice" id="notice" role="status"></div>
@@ -30,6 +31,23 @@ dialog{border:0;border-radius:18px;padding:0;box-shadow:0 35px 100px #0b263c66;w
 const KEY='ojt-scanner-records-v1';let records=[];try{records=JSON.parse(localStorage.getItem(KEY)||'[]')}catch{records=[]}let activeId=null;
 const $=id=>document.getElementById(id),fields=['company','address','duration','start_date','end_date','student','program','section'];
 function save(){localStorage.setItem(KEY,JSON.stringify(records));render()}
+async function reparseSaved(){
+const button=$('reparse');button.disabled=true;let updated=0;
+try{
+for(const original of [...records]){
+if(original.verified||!original.raw_text)continue;
+const snapshot=JSON.stringify(original);
+const response=await fetch('/api/reparse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({record:original})});
+const repaired=await response.json();if(!response.ok)throw Error(repaired.error||'Could not re-read saved OCR.');
+const index=records.findIndex(r=>r.id===original.id);
+if(index<0||JSON.stringify(records[index])!==snapshot||($('editor').open&&activeId===original.id))continue;
+if(repaired.id!==original.id)throw Error('Could not match the saved record.');
+records[index]=repaired;save();updated++;
+}
+toast(`Updated ${updated} unreviewed record${updated===1?'':'s'}.`);
+}catch(err){toast(err.message)}finally{button.disabled=false}
+}
+$('reparse').onclick=reparseSaved;
 function years(r){let a=Number((r.start_date||'').slice(0,4)),b=Number((r.end_date||'').slice(0,4));if(!a||!b||b<a||b-a>10)return [];return Array.from({length:b-a+1},(_,i)=>a+i)}
 function review(r){return fields.filter(k=>!r[k]).concat(r.verified?[]:['verification'])}
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}

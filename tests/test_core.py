@@ -2,10 +2,36 @@ import io
 import unittest
 import zipfile
 
-from app import parse_report, years_for_record, make_workbook
+from app import parse_report, years_for_record, make_workbook, repair_saved_record
 
 
 class ReportTests(unittest.TestCase):
+    def test_repairs_saved_unreviewed_address_without_losing_other_fields(self):
+        old = {'id': 'saved-id', 'company': 'UPHSL - Bifian', 'address': 'ITS Department', 'student': 'Dufigo, Ezra', 'section': 'J4A', 'verified': False, 'raw_text': 'TRAINING NARRATIVE REPORT\nUPHSL - Bifian\nITS Department\nNational Highway, Sto. Nifio, Bifian, Laguna\nOJT Duration:\nJuly 17, 2025 - Nov 12, 2025'}
+        fixed = repair_saved_record(old)
+        self.assertEqual(fixed['company'], 'UPHSL - Biñan')
+        self.assertEqual(fixed['address'], 'National Highway, Sto. Niño, Biñan, Laguna')
+        self.assertEqual(fixed['student'], 'Duñgo, Ezra')
+        self.assertEqual(fixed['section'], 'J4A')
+        self.assertEqual(fixed['id'], 'saved-id')
+        self.assertEqual(old['address'], 'ITS Department')
+        self.assertEqual(repair_saved_record(dict(old, verified=True)), dict(old, verified=True))
+        self.assertEqual(repair_saved_record({'id': 'no-ocr'}), {'id': 'no-ocr'})
+
+    def test_address_skips_department_and_keeps_street_lines(self):
+        for department in ('ITS Department', 'INFORMATION TECHNOLOGY DEPARTMENT'):
+            with self.subTest(department=department):
+                text = f'TRAINING NARRATIVE REPORT\nUPHSL - BIFIAN\n{department}\n83JP+F52, National Highway, Sto. Niöo,\nBifian, Laguna\nOJT Duration:\nJuly 17, 2025 - Nov 12, 2025\nSubmitted by:\nANTONIO, NICO JOHN Y.\nBSIT GD\nJ4A'
+                row = parse_report(text, 'address.jpg')
+                self.assertEqual(row['company'], 'UPHSL - BIÑAN')
+                self.assertEqual(row['address'], '83JP+F52, National Highway, Sto. Niño, Biñan, Laguna')
+                self.assertEqual(row['student'], 'ANTONIO, NICO JOHN Y.')
+
+    def test_department_without_street_address_is_flagged(self):
+        row = parse_report('TRAINING NARRATIVE REPORT\nUPHSL\nITS Department\nOJT Duration:\nJuly 17, 2025 - Nov 12, 2025\nSubmitted by:\nJane Doe\nBSIT - J4A', 'missing.jpg')
+        self.assertEqual(row['address'], '')
+        self.assertIn('address', row['needs_review'])
+
     def test_extracts_inline_section_after_program_or_major(self):
         for printed, program, section in (
             ('BSCS - J4S', 'BSCS', 'J4S'),

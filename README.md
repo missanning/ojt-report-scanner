@@ -22,4 +22,6 @@ If a duration spans two calendar years, the workbook contains one row for each y
 
 ## Tests
 
+Addresses include all lines below the company up to the duration or submission label, skipping department labels such as `ITS Department`. After updating the app, restart the server and refresh the page. Click **Re-read saved OCR** to repair company names and addresses in existing unreviewed records using their stored OCR text. Reviewed corrections are preserved.
+
 Run `python -m unittest discover -s tests -v`.

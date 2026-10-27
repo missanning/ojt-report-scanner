@@ -31,7 +31,7 @@ PROGRAM = re.compile(
 )
 SECTION = re.compile(r'\bJ\d{1,2}[A-Z]\b', re.I)
 # Confirmed against the supplied cover photos; never replace every "fi".
-ENYE_CORRECTIONS = {'bifian': 'biñan', 'nifio': 'niño', 'dufigo': 'duñgo', 'duigo': 'duñgo'}
+ENYE_CORRECTIONS = {'bifian': 'biñan', 'nifio': 'niño', 'niöo': 'niño', 'dufigo': 'duñgo', 'duigo': 'duñgo'}
 ENYE_OCR_WORDS = re.compile(r'\b(?:' + '|'.join(ENYE_CORRECTIONS) + r')\b', re.I)
 
 
@@ -64,11 +64,11 @@ def parse_report(text: str, filename: str) -> dict:
     if title < 0:
         title = next((i for i, line in enumerate(lower) if 'train' in line and 'report' in line), -1)
     if title >= 0:
-        following = lines[title + 1:title + 3]
+        block_end = next((i for i in range(title + 1, len(lines)) if any(marker in lower[i] for marker in ('duration', 'submitted by', 'submitted to'))), len(lines))
+        following = lines[title + 1:block_end]
         if following:
             row['company'] = following[0]
-        if len(following) > 1 and not any(marker in following[1].lower() for marker in ('ojt duration', 'submitted by', 'submitted to')):
-            row['address'] = following[1]
+        row['address'] = ' '.join(line for line in following[1:] if not re.search(r'\b(?:department|dept\.?)\b', line, re.I))
     duration_index = next((i for i, line in enumerate(lower) if 'duration' in line and ('ojt' in line or line == 'duration')), -1)
     if duration_index >= 0 and duration_index + 1 < len(lines):
         row['duration'] = lines[duration_index + 1]
@@ -94,6 +94,22 @@ def parse_report(text: str, filename: str) -> dict:
     if not row['start_date'] or not row['end_date']:
         row['needs_review'].append('dates')
     return row
+
+
+def repair_saved_record(record: dict) -> dict:
+    if record.get('verified') or not record.get('raw_text'):
+        return dict(record)
+    parsed = parse_report(record['raw_text'].split('[Student area OCR]')[0], record.get('source', ''))
+    repaired = dict(record)
+    if parsed['company']:
+        repaired['company'] = parsed['company']
+        repaired['address'] = parsed['address']
+    if repaired.get('student'):
+        repaired['student'] = clean(repaired['student'])
+    repaired['needs_review'] = [field for field in FIELDS if not repaired.get(field)]
+    if not repaired.get('start_date') or not repaired.get('end_date'):
+        repaired['needs_review'].append('dates')
+    return repaired
 
 
 def years_for_record(row: dict) -> list[int]:
@@ -215,6 +231,11 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError('Image is too large (16 MB maximum).')
                 result = scan_image(data, filename)
                 self.send_bytes(json.dumps(result).encode(), 'application/json; charset=utf-8')
+            elif self.path == '/api/reparse':
+                record = request['record']
+                if not isinstance(record, dict):
+                    raise ValueError('Invalid record.')
+                self.send_bytes(json.dumps(repair_saved_record(record)).encode(), 'application/json; charset=utf-8')
             elif self.path == '/api/export':
                 records = request['records']
                 if not isinstance(records, list) or len(records) > 10000:
