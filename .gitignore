@@ -1,0 +1,14 @@
+__pycache__/
+.serena/
+*.pyc
+*.xlsx
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.tif
+*.tiff
+sample-*.jpg
+sample-*.png
+try-section*.png
+tmp*/
